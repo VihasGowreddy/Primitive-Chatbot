@@ -9,10 +9,14 @@ from bs4 import BeautifulSoup
 from nltk import sent_tokenize
 import os
 import re
+import math
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 from collections import Counter
 import sqlite3
+
+if os.path.exists("knowledge_base.db"):
+    os.remove("knowledge_base.db")
 
 conn = sqlite3.connect("knowledge_base.db")
 c = conn.cursor()
@@ -124,24 +128,33 @@ def webcrawler_scrape(starting_url: str) -> list:
     return url_queue
 
 
-def term_frequency() -> dict:
+def tf_idf_frequency() -> dict:
     total_doc_tokens = list()
+    idf_dict = dict()  # key is word and value is num documents that word occurs in
+    num_docs = 0
     for filename in os.listdir("Edited_txt"):
         if "url_contents_edited" in filename:
             with open(os.path.join("Edited_txt", filename), "r", encoding="utf-8") as f:
                 file_txt = f.read()
                 file_preprocessed_tokens = preprocess(file_txt)
                 total_doc_tokens.extend(file_preprocessed_tokens)
+                num_docs += 1
+                for token in set(file_preprocessed_tokens):
+                    if token not in idf_dict:
+                        idf_dict[token] = 1
+                    else:
+                        idf_dict[token] = idf_dict[token] + 1
     # print(total_doc_tokens)
     # print(type(total_doc_tokens))
-    frequency_dict = dict()
+    tf_idf_dict = dict()
     occurrences = Counter(total_doc_tokens)
-    frequency_temp = {key: value / len(total_doc_tokens) for (key, value) in occurrences.items()}
+    frequency_temp = {key: ((value / len(total_doc_tokens)) * math.log((1 + num_docs) / (1 + idf_dict[key]))) for
+                      (key, value) in occurrences.items()}
     sorted_keys = sorted(frequency_temp, key=frequency_temp.get)
     for word in sorted_keys:
-        frequency_dict[word] = frequency_temp[word]
+        tf_idf_dict[word] = frequency_temp[word]
 
-    return frequency_dict
+    return tf_idf_dict
 
 
 if __name__ == '__main__':
@@ -150,14 +163,12 @@ if __name__ == '__main__':
     url_queue = webcrawler_scrape(starting_url)
     sent_list = clean_up_txt()
 
-    frequency_dict = term_frequency()
+    frequency_dict = tf_idf_frequency()
     print("\nList of Top 40 Terms by Frequency")
     print(list(frequency_dict.keys())[-40:])
 
     term_list = ["jordan", "nba", "game", "bulls", "chicago", "vs", "career", "finals", "points", "season"]
 
-    if os.path.exists("knowledgebase.db"):
-        os.remove("knowledgebase.db")
     create_database()
 
     for term in term_list:
@@ -166,7 +177,7 @@ if __name__ == '__main__':
                 c.execute("INSERT INTO knowledgeBase (term, sentence) VALUES (?,?)",
                           (term, sent))
                 conn.commit()
-    #c.execute("INSERT INTO knowledgeBase (term, sentence) VALUES (?,?)", ("vs", "asdfasdfasdf fasdf d"))
-    #conn.commit()
+    # c.execute("INSERT INTO knowledgeBase (term, sentence) VALUES (?,?)", ("vs", "asdfasdfasdf fasdf d"))
+    # conn.commit()
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
