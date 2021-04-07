@@ -2,7 +2,8 @@ from typing import Any, Dict
 
 from fastapi import Body, FastAPI
 from pydantic import BaseModel
-
+import dialogflow_v2beta1
+client = dialogflow_v2beta1.AgentsClient()
 app = FastAPI()
 
 
