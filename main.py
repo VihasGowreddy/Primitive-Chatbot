@@ -70,7 +70,7 @@ def webcrawler_scrape(starting_url: str) -> list:
     url_queue = list()
     url_queue.insert(0, starting_url)
 
-    while num_urls < 200:
+    while num_urls < 0:
         url = url_queue.pop()
         print(f"Link Currently being Scraped: {url}")
         print("--------------------------------------")
@@ -99,8 +99,6 @@ def webcrawler_scrape(starting_url: str) -> list:
     url_queue.append("https://en.wikipedia.org/wiki/List_of_career_achievements_by_Michael_Jordan")
     url_queue.append("https://en.wikipedia.org/wiki/1984_NBA_draft")
     url_queue.append("https://www.sbnation.com/secret-base/22307608/seagram-award-michael-jordan-mvp-1987")
-    url_queue.append("https://www.nba.com/history/legends/profiles/michael-jordan")
-    url_queue.append("https://www.nba.com/stats/player/893/career/")
     url_queue.append("https://bleacherreport.com/articles/2888183-how-michael-jordan-broke-the-jordan-rules")
     url_queue.append("https://www.cnbc.com/2020/05/17/michael-jordan-was-jerk-says-teammates-why-it-helped.html")
     url_queue.append(
@@ -167,7 +165,7 @@ if __name__ == '__main__':
     print("\nList of Top 40 Terms by Frequency")
     print(list(frequency_dict.keys())[-40:])
 
-    term_list = ["jordan", "nba", "game", "bulls", "chicago", "vs", "career", "finals", "points", "season"]
+    term_list = ["game", "points", "draft", "goal", "pick", "finals", "round", "june", "may", "basketball"]
 
     create_database()
 
