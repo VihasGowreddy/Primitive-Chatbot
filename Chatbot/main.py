@@ -24,21 +24,50 @@ from nba_api.stats.library.parameters import SeasonAll
 #     buckets = list(storage_client.list_buckets())
 #     print(buckets)
 
-# client = dialogflow_v2beta1.AgentsClient()
-# app = FastAPI()
-#
-#
-# class Intent(BaseModel):
-#     displayName: str
-#
-#
-# class Request(BaseModel):
-#     intent: Intent
-#     parameters: Dict[str, Any]
-#
-#
-# class OutputContext(BaseModel):
-#     name: str
+#client = dialogflow_v2beta1.AgentsClient()
+app = FastAPI()
+
+
+class Intent(BaseModel):
+    displayName: str
+
+
+class Request(BaseModel):
+    intent: Intent
+    parameters: Dict[str, Any]
+
+
+class OutputContext(BaseModel):
+    name: str
+
+
+def levenshtein_distance(stem: str, word: str):
+    '''
+
+    :param stem: string corresponding to the stem of a word
+    :param word: string corresponding to the word that is being compared to it's stem
+    :return: the edit distance (number of letters that need to be changed, deleted, or added to make both strings equal)
+    '''
+    stem_len = len(stem) + 1
+    word_len = len(word) + 1
+    matrix = [[0 for x in range(word_len)] for y in range(stem_len)]
+
+    for x in range(1, stem_len):
+        matrix[x][0] = x
+
+    for y in range(1, word_len):
+        matrix[0][y] = y
+
+    substitution_cost = 0
+    for y in range(1, word_len):
+        for x in range(1, stem_len):
+            if stem[x - 1] == word[y - 1]:
+                substitution_cost = 0
+            else:
+                substitution_cost = 1
+            matrix[x][y] = min(matrix[x - 1][y] + 1, matrix[x][y - 1] + 1, matrix[x - 1][y - 1] + substitution_cost)
+
+    return matrix[stem_len - 1][word_len - 1]
 
 
 def nba_team_dict() -> dict:
@@ -81,39 +110,52 @@ def nba_team_dict() -> dict:
     return nba_teams
 
 
-# @app.post("/")
-# async def home(queryResult: Request = Body(..., embed=True)):
-#     intent = queryResult.intent.displayName
-#     count = len(queryResult.parameters)
-#     text = f"I'm responding to the {intent} intent with {count} slots found: "
-#     text += ",".join(queryResult.parameters.values())
-#     return {"fulfillmentText": text}
+def handle_fallback() -> str:
+    return ""
 
-if __name__ == '__main__':
-    #     os.path.join("/c/Users/vihas/Desktop/UTDALLAS", "\"Semester 8\"/NLP/jordan-infobot-eaok-2dd0da1e3e3a.json")
-    #     if os.path.exists("../../jordan-infobot-eaok-2dd0da1e3e3a.json"):
-    #         print("IS FILE")
-    #     else:
-    #         print("IS NOT FILE")
-    #     explicit()
-    nba_teams = teams.get_teams()
-    sonics = [team for team in nba_teams if team['abbreviation'] == 'SAS'][0]
-    sonics_id = sonics['id']
+intent_dict = {
+    "Default Fallback Intent": handle_fallback,
+    "Finished Talking": ,
+    "JordanRandomFact": ,
+    "JordanSentenceGenerator": ,
+    "CreateAccount - no - Username": ,
+    "CreateAccount - no - Username - FavoriteTeam": ,
+    "CreatedAccount - yes - Username": ,
+}
 
-    jordan = players.find_players_by_full_name("Lebron James")
-    jordan_id = jordan[0]['id']
-    print(jordan_id)
+@app.post("/")
+async def home(queryResult: Request = Body(..., embed=True)):
+    intent = queryResult.intent.displayName
+    count = len(queryResult.parameters)
+    text = f"I'm responding to the {intent} intent with {count} slots found: "
+    text += ",".join(queryResult.parameters.values())
+    return {"fulfillmentText": text}
 
-    # If you want all seasons, you must import the SeasonAll parameter
-    from nba_api.stats.library.parameters import SeasonAll
-    import pandas as pd
-
-    gamelog_bron_all = playergamelog.PlayerGameLog(player_id=jordan_id, season=SeasonAll.all)
-
-    df_jordan_games = playergamelog.PlayerGameLog(player_id=jordan_id, season=SeasonAll.all)
-    #print(df_jordan_games)
-
-    payton = players.find_players_by_full_name("Kobe Bryant")
-    payton_id = payton[0]['id']
-
-    print(playervsplayer.PlayerVsPlayer(player_id=jordan_id, vs_player_id=payton_id).get_data_frames())
+# if __name__ == '__main__':
+#     #     os.path.join("/c/Users/vihas/Desktop/UTDALLAS", "\"Semester 8\"/NLP/jordan-infobot-eaok-2dd0da1e3e3a.json")
+#     #     if os.path.exists("../../jordan-infobot-eaok-2dd0da1e3e3a.json"):
+#     #         print("IS FILE")
+#     #     else:
+#     #         print("IS NOT FILE")
+#     #     explicit()
+#     nba_teams = teams.get_teams()
+#     sonics = [team for team in nba_teams if team['abbreviation'] == 'SAS'][0]
+#     sonics_id = sonics['id']
+#
+#     jordan = players.find_players_by_full_name("Lebron James")
+#     jordan_id = jordan[0]['id']
+#     print(jordan_id)
+#
+#     # If you want all seasons, you must import the SeasonAll parameter
+#     from nba_api.stats.library.parameters import SeasonAll
+#     import pandas as pd
+#
+#     gamelog_bron_all = playergamelog.PlayerGameLog(player_id=jordan_id, season=SeasonAll.all)
+#
+#     df_jordan_games = playergamelog.PlayerGameLog(player_id=jordan_id, season=SeasonAll.all)
+#     #print(df_jordan_games)
+#
+#     payton = players.find_players_by_full_name("Kobe Bryant")
+#     payton_id = payton[0]['id']
+#
+#     print(playervsplayer.PlayerVsPlayer(player_id=jordan_id, vs_player_id=payton_id).get_data_frames())
