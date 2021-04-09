@@ -141,6 +141,11 @@ def handle_fallback(query_text: str) -> str:
 
     return fullfillment_txt_return
 
+
+def handle_random_fact() -> str:
+    return "Here is a fact"
+
+
 def cosine_similarity(query_text: str, prebuilt_questions: str) -> int:
     query_tokens = word_tokenize(query_text)
     question_tokens = word_tokenize(prebuilt_questions)
@@ -170,14 +175,17 @@ def cosine_similarity(query_text: str, prebuilt_questions: str) -> int:
 
 intent_dict = {
     "Default Fallback Intent": handle_fallback,
+    "Jordan_Random_Fact": handle_random_fact,
 }
 
 @app.post("/")
 async def home(queryResult: Request = Body(..., embed=True)):
     intent = queryResult.intent.displayName
     #print(intent)
-    if intent == "Welcome Fallback Intent":
+    if intent == "Welcome_Fallback_Intent":
         text = handle_fallback(queryResult.queryText)
+    elif intent == "Jordan_Random_Fact":
+        handle_random_fact()
     else:
         text = "I'm not sure how to help with that"
     # if handler := intent_dict.get(intent):
@@ -187,18 +195,18 @@ async def home(queryResult: Request = Body(..., embed=True)):
     return {"fulfillmentText": text}
 
 # if __name__ == '__main__':
-#     #print(handle_fallback("What can you say?"))
-# #     #     os.path.join("/c/Users/vihas/Desktop/UTDALLAS", "\"Semester 8\"/NLP/jordan-infobot-eaok-2dd0da1e3e3a.json")
-# #     #     if os.path.exists("../../jordan-infobot-eaok-2dd0da1e3e3a.json"):
-# #     #         print("IS FILE")
-# #     #     else:
-# #     #         print("IS NOT FILE")
-# #     #     explicit()
+# #     #print(handle_fallback("What can you say?"))
+# # #     #     os.path.join("/c/Users/vihas/Desktop/UTDALLAS", "\"Semester 8\"/NLP/jordan-infobot-eaok-2dd0da1e3e3a.json")
+# # #     #     if os.path.exists("../../jordan-infobot-eaok-2dd0da1e3e3a.json"):
+# # #     #         print("IS FILE")
+# # #     #     else:
+# # #     #         print("IS NOT FILE")
+# # #     #     explicit()
 #     nba_teams = teams.get_teams()
-#     sonics = [team for team in nba_teams if team['abbreviation'] == 'SAS'][0]
+#     sonics = [team for team in nba_teams if team['abbreviation'] == 'UTA'][0]
 #     sonics_id = sonics['id']
 #
-#     jordan = players.find_players_by_full_name("Michael Jordan")
+#     jordan = players.find_players_by_full_name("Lebron James")
 #     jordan_id = jordan[0]['id']
 #     print(jordan_id)
 #
@@ -216,4 +224,4 @@ async def home(queryResult: Request = Body(..., embed=True)):
 #     payton = players.find_players_by_full_name("Patrick Ewing")
 #     payton_id = payton[0]['id']
 #
-#     print(PlayerDashboardByOpponent(player_id=jordan_id).get_data_frames())
+#     print(PlayerDashboardByOpponent(player_id=jordan_id, opponent_team_id=sonics_id).get_data_frames())
