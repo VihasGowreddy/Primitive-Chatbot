@@ -1,181 +1,219 @@
-# This is a sample Python script.
+from typing import Any, Dict
 
-# Press Shift+F10 to execute it or replace it with your code.
-# Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
-
-import requests
-from urllib import request
-from bs4 import BeautifulSoup
-from nltk import sent_tokenize
-import os
-import re
-import math
-from nltk.tokenize import word_tokenize
+from fastapi import Body, FastAPI
+from pydantic import BaseModel
 from nltk.corpus import stopwords
-from collections import Counter
-import sqlite3
+from nltk.tokenize import word_tokenize
+from numpy import dot
+from numpy.linalg import norm
+import random
 
-if os.path.exists("knowledge_base.db"):
-    os.remove("knowledge_base.db")
+import dialogflow_v2beta1
+import os
 
-conn = sqlite3.connect("knowledge_base.db")
-c = conn.cursor()
-
-
-def create_database():
-    c.execute("CREATE TABLE knowledgeBase (term REAL, sentence TEXT)")
-    conn.commit()
-
-
-def preprocess(file_txt: str) -> list:
-    '''
-    preprocesses text
-    :param file_txt: string representing content of file
-    :return: filtered_tokens a list of lowercase filtered tokens with no punctuation or stopwords
-    '''
-    lower_txt = file_txt.lower()
-    no_punc_txt = re.sub("[^\w\s]", " ", lower_txt)
-    txt_tokens = word_tokenize(no_punc_txt)
-    stop_words = set(stopwords.words('english'))
-    filtered_tokens = [i for i in txt_tokens if i.isalpha() and i not in stop_words]
-    return filtered_tokens
+from nba_api.stats.static import teams
+from nba_api.stats.static import players
+from nba_api.stats.endpoints import playervsplayer
+from nba_api.stats.endpoints import playergamelog
+from nba_api.stats.library.parameters import SeasonAll
 
 
-def clean_up_txt() -> list:
-    index = 0
-    total_sent_list = list()
+# def explicit():
+#     from google.cloud import storage
+#
+#     # Explicitly use service account credentials by specifying the private key
+#     # file.
+#     storage_client = storage.Client.from_service_account_json(
+#         '../../jordan-infobot-eaok-2dd0da1e3e3a.json')
+#
+#     # Make an authenticated API request
+#     buckets = list(storage_client.list_buckets())
+#     print(buckets)
 
-    for filename in os.listdir("Unedited_txt"):
-        if "url_contents" in filename:
-            with open(os.path.join("Unedited_txt", filename), "r", encoding="utf-8") as f, open(
-                    os.path.join("Edited_txt", f"{index}_url_contents_edited"), "w", encoding="utf-8") as f_write:
-                unedited = f.read().replace("\n", "")
-                edited = unedited.replace("\t", "")
-                edited_sent = sent_tokenize(edited)
-                for sent in edited_sent:
-                    f_write.write(sent)
-                    total_sent_list.append(sent)
-            index += 1
-
-    return total_sent_list
+#client = dialogflow_v2beta1.AgentsClient()
+app = FastAPI()
 
 
-def webcrawler_scrape(starting_url: str) -> list:
+class Intent(BaseModel):
+    displayName: str
+
+#class OutputContext(BaseModel):
+#    name: str
+
+class Request(BaseModel):
+    queryText: str
+    intent: Intent
+    parameters: Dict[str, Any]
+    #outputContext: OutputContext
+
+
+def levenshtein_distance(stem: str, word: str):
     '''
 
-    :param starting_url:
-    :return:
+    :param stem: string corresponding to the stem of a word
+    :param word: string corresponding to the word that is being compared to it's stem
+    :return: the edit distance (number of letters that need to be changed, deleted, or added to make both strings equal)
     '''
-    num_urls = 0
-    url_queue = list()
-    url_queue.insert(0, starting_url)
+    stem_len = len(stem) + 1
+    word_len = len(word) + 1
+    matrix = [[0 for x in range(word_len)] for y in range(stem_len)]
 
-    while num_urls < 0:
-        url = url_queue.pop()
-        print(f"Link Currently being Scraped: {url}")
-        print("--------------------------------------")
-        r = requests.get(url)
-        data = r.text
-        soup = BeautifulSoup(data, "html.parser")
+    for x in range(1, stem_len):
+        matrix[x][0] = x
 
-        for link in soup.find_all('a'):
-            if link.get("href") is None or "map" in link.get("href"):
-                continue
+    for y in range(1, word_len):
+        matrix[0][y] = y
 
-            if "https://" in link.get("href"):
-                index_http = link.get("href").index("https://")
-                end_index = len(link.get("href"))
-                if "&sa=" in link.get("href"):
-                    end_index = link.get("href").index("&sa=")
-                print(link.get("href")[index_http:end_index])
-                if link.get("href")[index_http:end_index] not in url_queue:
-                    url_queue.insert(0, link.get("href")[index_http:end_index])
-                num_urls += 1
-            if num_urls >= 200:
-                break
+    substitution_cost = 0
+    for y in range(1, word_len):
+        for x in range(1, stem_len):
+            if stem[x - 1] == word[y - 1]:
+                substitution_cost = 0
+            else:
+                substitution_cost = 1
+            matrix[x][y] = min(matrix[x - 1][y] + 1, matrix[x][y - 1] + 1, matrix[x - 1][y - 1] + substitution_cost)
 
-    url_queue.clear()
-    url_queue.append("https://en.wikipedia.org/wiki/Michael_Jordan")
-    url_queue.append("https://en.wikipedia.org/wiki/List_of_career_achievements_by_Michael_Jordan")
-    url_queue.append("https://en.wikipedia.org/wiki/1984_NBA_draft")
-    url_queue.append("https://www.sbnation.com/secret-base/22307608/seagram-award-michael-jordan-mvp-1987")
-    url_queue.append("https://bleacherreport.com/articles/2888183-how-michael-jordan-broke-the-jordan-rules")
-    url_queue.append("https://www.cnbc.com/2020/05/17/michael-jordan-was-jerk-says-teammates-why-it-helped.html")
-    url_queue.append(
-        "https://www.essentiallysports.com/nba-news-on-this-day-michael-jordan-signed-a-deal-that-changed-nba-forever-chicago-bulls-basketball/")
-    url_queue.append(
-        "https://www.theguardian.com/sport/2020/may/24/michael-jordan-was-years-ahead-of-his-game-the-last-dance-showed-that-he-still-is")
-    url_queue.append(
-        "https://www.cbssports.com/nba/news/michael-jordan-didnt-retire-just-because-of-jerry-krause-who-continues-to-be-disproportionately-vilified/")
-    url_queue.append("https://faze.ca/michael-jordan-a-global-icon/")
-    url_queue.append(
-        "https://www.miningjournal.net/sports/2020/05/chicago-bulls-teammates-saw-first-hand-the-price-michael-jordan-had-to-pay-for-excellence/")
-    url_queue.append("https://www.biography.com/athlete/michael-jordan")
-    url_queue.append("https://www.usatoday.com/story/gameon/2012/12/12/nba-jordan-bulls-12/1763265/")
-
-    for count, url in enumerate(url_queue):
-        with open(os.path.join("Unedited_txt", f"{count}_url_contents"), "w", encoding="utf-8") as f:
-            # print(count)
-            html = request.urlopen(url).read().decode("utf8")
-            soup = BeautifulSoup(html, "html.parser")
-            for script in soup(["script", "style"]):
-                script.extract()
-            text = soup.get_text()
-            f.write(text)
-
-    return url_queue
+    return matrix[stem_len - 1][word_len - 1]
 
 
-def tf_idf_frequency() -> dict:
-    total_doc_tokens = list()
-    idf_dict = dict()  # key is word and value is num documents that word occurs in
-    num_docs = 0
-    for filename in os.listdir("Edited_txt"):
-        if "url_contents_edited" in filename:
-            with open(os.path.join("Edited_txt", filename), "r", encoding="utf-8") as f:
-                file_txt = f.read()
-                file_preprocessed_tokens = preprocess(file_txt)
-                total_doc_tokens.extend(file_preprocessed_tokens)
-                num_docs += 1
-                for token in set(file_preprocessed_tokens):
-                    if token not in idf_dict:
-                        idf_dict[token] = 1
-                    else:
-                        idf_dict[token] = idf_dict[token] + 1
-    # print(total_doc_tokens)
-    # print(type(total_doc_tokens))
-    tf_idf_dict = dict()
-    occurrences = Counter(total_doc_tokens)
-    frequency_temp = {key: ((value / len(total_doc_tokens)) * math.log((1 + num_docs) / (1 + idf_dict[key]))) for
-                      (key, value) in occurrences.items()}
-    sorted_keys = sorted(frequency_temp, key=frequency_temp.get)
-    for word in sorted_keys:
-        tf_idf_dict[word] = frequency_temp[word]
+def nba_team_dict() -> dict:
+    nba_teams = dict()
+    nba_teams["Atlanta Hawks"] = "ATL"
+    nba_teams["Boston Celtics"] = "BOS"
+    nba_teams["Brooklyn Nets"] = "BKN"
+    nba_teams["Charlotte Hornets"] = "CHA"
+    nba_teams["Chicago Bulls"] = "CHI"
+    nba_teams["Cleveland Cavaliers"] = "CLE"
+    nba_teams["Dallas Mavericks"] = "DAL"
+    nba_teams["Denver Nuggets"] = "DEN"
+    nba_teams["Detroit Pistons"] = "DET"
+    nba_teams["Golden State Warriors"] = "GSW"
+    nba_teams["Houston Rockets"] = "HOU"
+    nba_teams["Indiana Pacers"] = "IND"
+    nba_teams["Los Angeles Clippers"] = "LAC"
+    nba_teams["Los Angeles Lakers"] = "LAL"
+    nba_teams["Memphis Grizzlies"] = "MEM"
+    nba_teams["Miami Heat"] = "MIA"
+    nba_teams["Milwaukee Bucks"] = "MIL"
+    nba_teams["Minnesota Timberwolves"] = "MIN"
+    nba_teams["New Jersey Nets"] = "NJN"
+    nba_teams["New Orleans Hornets"] = "NOK"
+    nba_teams["New Orleans Pelicans"] = "NOP"
+    nba_teams["New York Knicks"] = "NYK"
+    nba_teams["Oklahoma City Thunder"] = "OKC"
+    nba_teams["Orlando Magic"] = "ORL"
+    nba_teams["Philadelphia 76ers"] = "PHI"
+    nba_teams["Phoenix Suns"] = "PHX"
+    nba_teams["Portland Trailblazers"] = "POR"
+    nba_teams["Sacramento Kings"] = "SAC"
+    nba_teams["San Antonio Spurs"] = "SAS"
+    nba_teams["Seattle SuperSonics"] = "SEA"
+    nba_teams["Toronto Raptors"] = "TOR"
+    nba_teams["Utah Jazz"] = "UTA"
+    nba_teams["Vancouver Grizzlies"] = "VAN"
+    nba_teams["Washington Bullets"] = "WAS"
+    nba_teams["Washington Wizards"] = "WAS"
+    return nba_teams
 
-    return tf_idf_dict
+question_list = ["Leave", "Exit", "I'm done", "I have no more questions", "Tell me a fact about you", "Give me a Jordan fact", "Tell me a random fact about you", "What is a random fact about you?", "Tell me a random fact about Jordan", "What is a random fact about Jordan?", "Functionality", "What functionality do you have", "What options do I have", "What can I ask?", "What can you do?"]
+def handle_fallback(query_text: str) -> str:
+    highest_cosine_similarity = 0
+    closest_response = ""
+    for response in question_list:
+        cosine_val = cosine_similarity(query_text, response)
+        #print(cosine_val)
+        #print(response)
+        if cosine_val != 0 and cosine_val >= highest_cosine_similarity:
+            highest_cosine_similarity = cosine_val
+            closest_response = response
+
+    fullfillment_txt_return = ""
+    if closest_response != "":
+        fullfillment_txt_return += f"I didn't understand what you said. Did you mean \"{closest_response}\"? If yes, type the response. If no, some questions/responses I can act on are "
+    else:
+        fullfillment_txt_return += "I didn't understand what you said. Some questions/responses I can act on are "
+    for x in range(0, 3):
+        index = random.randint(0, len(question_list) - 1)
+        if x != 2:
+            fullfillment_txt_return += f"\"{question_list[index]}\", "
+        else:
+            fullfillment_txt_return += f"\"{question_list[index]}\"."
+
+    return fullfillment_txt_return
+
+def cosine_similarity(query_text: str, prebuilt_questions: str) -> int:
+    query_tokens = word_tokenize(query_text)
+    question_tokens = word_tokenize(prebuilt_questions)
+    stop_words = stopwords.words("english")
+    occurrences_query = list()
+    occurrences_question = list()
+
+    query_no_stopwords = [x for x in query_tokens if x not in stop_words]
+    question_no_stopwords = [x for x in question_tokens if x not in stop_words]
+    query_set = set(query_no_stopwords)
+    question_set = set(question_no_stopwords)
+    vocab = query_set.union(question_set)
+    sorted_vocab = sorted(vocab)
+
+    for word in sorted_vocab:
+        if word in query_set:
+            occurrences_query.append(query_tokens.count(word))
+        else:
+            occurrences_query.append(0)
+        if word in question_set:
+            occurrences_question.append(question_tokens.count(word))
+        else:
+            occurrences_question.append(0)
+
+    return float(dot(occurrences_query, occurrences_question)) / (norm(occurrences_query) * norm(occurrences_question))
 
 
-if __name__ == '__main__':
-    starting_url = "https://www.google.com/search?q=michael+jordan&rlz=1C1SQJL_enUS807US807&oq=michael+jordan+&aqs=chrome.0.69i59l3j35i39j0j69i60l3.3303j0j7&sourceid=chrome&ie=UTF-8"
+intent_dict = {
+    "Default Fallback Intent": handle_fallback,
+}
 
-    url_queue = webcrawler_scrape(starting_url)
-    sent_list = clean_up_txt()
+@app.post("/")
+async def home(queryResult: Request = Body(..., embed=True)):
+    intent = queryResult.intent.displayName
+    #print(intent)
+    if intent == "Welcome Fallback Intent":
+        text = handle_fallback(queryResult.queryText)
+    else:
+        text = "I'm not sure how to help with that"
+    # if handler := intent_dict.get(intent):
+    #     text = handler(**queryResult.parameters)
+    # else:
+    #     text = "I'm not sure how to help with that"
+    return {"fulfillmentText": text}
 
-    frequency_dict = tf_idf_frequency()
-    print("\nList of Top 40 Terms by Frequency")
-    print(list(frequency_dict.keys())[-40:])
-
-    term_list = ["game", "points", "draft", "goal", "pick", "finals", "round", "june", "may", "basketball"]
-
-    create_database()
-
-    for term in term_list:
-        for sent in sent_list:
-            if term in sent or term.capitalize() in sent:
-                c.execute("INSERT INTO knowledgeBase (term, sentence) VALUES (?,?)",
-                          (term, sent))
-                conn.commit()
-    # c.execute("INSERT INTO knowledgeBase (term, sentence) VALUES (?,?)", ("vs", "asdfasdfasdf fasdf d"))
-    # conn.commit()
-
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+# if __name__ == '__main__':
+#     #print(handle_fallback("What can you say?"))
+# #     #     os.path.join("/c/Users/vihas/Desktop/UTDALLAS", "\"Semester 8\"/NLP/jordan-infobot-eaok-2dd0da1e3e3a.json")
+# #     #     if os.path.exists("../../jordan-infobot-eaok-2dd0da1e3e3a.json"):
+# #     #         print("IS FILE")
+# #     #     else:
+# #     #         print("IS NOT FILE")
+# #     #     explicit()
+#     nba_teams = teams.get_teams()
+#     sonics = [team for team in nba_teams if team['abbreviation'] == 'SAS'][0]
+#     sonics_id = sonics['id']
+#
+#     jordan = players.find_players_by_full_name("Michael Jordan")
+#     jordan_id = jordan[0]['id']
+#     print(jordan_id)
+#
+#     # If you want all seasons, you must import the SeasonAll parameter
+#     from nba_api.stats.library.parameters import SeasonAll
+#     from nba_api.stats.endpoints import PlayerDashboardByOpponent
+#     import nba_api.stats.library.parameters as nba_params
+#     import pandas as pd
+#
+#     gamelog_bron_all = playergamelog.PlayerGameLog(player_id=jordan_id, season=SeasonAll.all)
+#
+#     df_jordan_games = playergamelog.PlayerGameLog(player_id=jordan_id, season=SeasonAll.all)
+#     #print(df_jordan_games)
+#
+#     payton = players.find_players_by_full_name("Patrick Ewing")
+#     payton_id = payton[0]['id']
+#
+#     print(PlayerDashboardByOpponent(player_id=jordan_id).get_data_frames())
