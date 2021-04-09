@@ -176,7 +176,7 @@ intent_dict = {
 async def home(queryResult: Request = Body(..., embed=True)):
     intent = queryResult.intent.displayName
     #print(intent)
-    if intent == "Default Fallback Intent":
+    if intent == "Welcome Fallback Intent":
         text = handle_fallback(queryResult.queryText)
     else:
         text = "I'm not sure how to help with that"
