@@ -1,1 +1,1 @@
-web: uvicorn --port $PORT Chatbot.main:app
+web: uvicorn Chatbot.main:app --host=0.0.0.0 --port=${PORT:-5000}
