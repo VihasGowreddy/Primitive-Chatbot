@@ -182,10 +182,10 @@ intent_dict = {
 async def home(queryResult: Request = Body(..., embed=True)):
     intent = queryResult.intent.displayName
     #print(intent)
-    if intent == "Welcome_Fallback_Intent":
+    if intent == "Default_Welcome_Intent - fallback":
         text = handle_fallback(queryResult.queryText)
     elif intent == "Jordan_Random_Fact":
-        handle_random_fact()
+        text = handle_random_fact()
     else:
         text = "I'm not sure how to help with that"
     # if handler := intent_dict.get(intent):
