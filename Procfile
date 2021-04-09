@@ -1,1 +1,1 @@
-web: uvicorn --port 80 main:app
+web: uvicorn --port $PORT Chatbot.main:app
