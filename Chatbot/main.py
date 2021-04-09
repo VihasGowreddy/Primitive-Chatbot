@@ -2,6 +2,12 @@ from typing import Any, Dict
 
 from fastapi import Body, FastAPI
 from pydantic import BaseModel
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+from numpy import dot
+from numpy.linalg import norm
+import random
+
 import dialogflow_v2beta1
 import os
 
@@ -31,14 +37,14 @@ app = FastAPI()
 class Intent(BaseModel):
     displayName: str
 
+#class OutputContext(BaseModel):
+#    name: str
 
 class Request(BaseModel):
+    queryText: str
     intent: Intent
     parameters: Dict[str, Any]
-
-
-class OutputContext(BaseModel):
-    name: str
+    #outputContext: OutputContext
 
 
 def levenshtein_distance(stem: str, word: str):
@@ -109,45 +115,97 @@ def nba_team_dict() -> dict:
     nba_teams["Washington Wizards"] = "WAS"
     return nba_teams
 
+question_list = ["Leave", "Exit", "I'm done", "I have no more questions", "Tell me a fact about you", "Give me a Jordan fact", "Tell me a random fact about you", "What is a random fact about you?", "Tell me a random fact about Jordan", "What is a random fact about Jordan?", "Functionality", "What functionality do you have", "What options do I have", "What can I ask?", "What can you do?"]
+def handle_fallback(query_text: str) -> str:
+    highest_cosine_similarity = 0
+    closest_response = ""
+    for response in question_list:
+        cosine_val = cosine_similarity(query_text, response)
+        #print(cosine_val)
+        #print(response)
+        if cosine_val != 0 and cosine_val >= highest_cosine_similarity:
+            highest_cosine_similarity = cosine_val
+            closest_response = response
 
-def handle_fallback() -> str:
-    return ""
+    fullfillment_txt_return = ""
+    if closest_response != "":
+        fullfillment_txt_return += f"I didn't understand what you said. Did you mean \"{closest_response}\"? If yes, type the response. If no, some questions/responses I can act on are "
+    else:
+        fullfillment_txt_return += "I didn't understand what you said. Some questions/responses I can act on are "
+    for x in range(0, 3):
+        index = random.randint(0, len(question_list) - 1)
+        if x != 2:
+            fullfillment_txt_return += f"\"{question_list[index]}\", "
+        else:
+            fullfillment_txt_return += f"\"{question_list[index]}\"."
+
+    return fullfillment_txt_return
+
+def cosine_similarity(query_text: str, prebuilt_questions: str) -> int:
+    query_tokens = word_tokenize(query_text)
+    question_tokens = word_tokenize(prebuilt_questions)
+    stop_words = stopwords.words("english")
+    occurrences_query = list()
+    occurrences_question = list()
+
+    query_no_stopwords = [x for x in query_tokens if x not in stop_words]
+    question_no_stopwords = [x for x in question_tokens if x not in stop_words]
+    query_set = set(query_no_stopwords)
+    question_set = set(question_no_stopwords)
+    vocab = query_set.union(question_set)
+    sorted_vocab = sorted(vocab)
+
+    for word in sorted_vocab:
+        if word in query_set:
+            occurrences_query.append(query_tokens.count(word))
+        else:
+            occurrences_query.append(0)
+        if word in question_set:
+            occurrences_question.append(question_tokens.count(word))
+        else:
+            occurrences_question.append(0)
+
+    return float(dot(occurrences_query, occurrences_question)) / (norm(occurrences_query) * norm(occurrences_question))
+
 
 intent_dict = {
     "Default Fallback Intent": handle_fallback,
-    "Finished Talking": ,
-    "JordanRandomFact": ,
-    "JordanSentenceGenerator": ,
-    "CreateAccount - no - Username": ,
-    "CreateAccount - no - Username - FavoriteTeam": ,
-    "CreatedAccount - yes - Username": ,
 }
 
 @app.post("/")
 async def home(queryResult: Request = Body(..., embed=True)):
     intent = queryResult.intent.displayName
-    count = len(queryResult.parameters)
-    text = f"I'm responding to the {intent} intent with {count} slots found: "
-    text += ",".join(queryResult.parameters.values())
+    #print(intent)
+    if intent == "Default Fallback Intent":
+        text = handle_fallback(queryResult.queryText)
+    else:
+        text = "I'm not sure how to help with that"
+    # if handler := intent_dict.get(intent):
+    #     text = handler(**queryResult.parameters)
+    # else:
+    #     text = "I'm not sure how to help with that"
     return {"fulfillmentText": text}
 
 # if __name__ == '__main__':
-#     #     os.path.join("/c/Users/vihas/Desktop/UTDALLAS", "\"Semester 8\"/NLP/jordan-infobot-eaok-2dd0da1e3e3a.json")
-#     #     if os.path.exists("../../jordan-infobot-eaok-2dd0da1e3e3a.json"):
-#     #         print("IS FILE")
-#     #     else:
-#     #         print("IS NOT FILE")
-#     #     explicit()
+#     #print(handle_fallback("What can you say?"))
+# #     #     os.path.join("/c/Users/vihas/Desktop/UTDALLAS", "\"Semester 8\"/NLP/jordan-infobot-eaok-2dd0da1e3e3a.json")
+# #     #     if os.path.exists("../../jordan-infobot-eaok-2dd0da1e3e3a.json"):
+# #     #         print("IS FILE")
+# #     #     else:
+# #     #         print("IS NOT FILE")
+# #     #     explicit()
 #     nba_teams = teams.get_teams()
 #     sonics = [team for team in nba_teams if team['abbreviation'] == 'SAS'][0]
 #     sonics_id = sonics['id']
 #
-#     jordan = players.find_players_by_full_name("Lebron James")
+#     jordan = players.find_players_by_full_name("Michael Jordan")
 #     jordan_id = jordan[0]['id']
 #     print(jordan_id)
 #
 #     # If you want all seasons, you must import the SeasonAll parameter
 #     from nba_api.stats.library.parameters import SeasonAll
+#     from nba_api.stats.endpoints import PlayerDashboardByOpponent
+#     import nba_api.stats.library.parameters as nba_params
 #     import pandas as pd
 #
 #     gamelog_bron_all = playergamelog.PlayerGameLog(player_id=jordan_id, season=SeasonAll.all)
@@ -155,7 +213,7 @@ async def home(queryResult: Request = Body(..., embed=True)):
 #     df_jordan_games = playergamelog.PlayerGameLog(player_id=jordan_id, season=SeasonAll.all)
 #     #print(df_jordan_games)
 #
-#     payton = players.find_players_by_full_name("Kobe Bryant")
+#     payton = players.find_players_by_full_name("Patrick Ewing")
 #     payton_id = payton[0]['id']
 #
-#     print(playervsplayer.PlayerVsPlayer(player_id=jordan_id, vs_player_id=payton_id).get_data_frames())
+#     print(PlayerDashboardByOpponent(player_id=jordan_id).get_data_frames())
