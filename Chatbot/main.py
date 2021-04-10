@@ -288,7 +288,7 @@ async def home(queryResult: Request = Body(..., embed=True)):
     if intent == "Default_Welcome_Intent - fallback":
         text = handle_fallback(queryResult.queryText)
     elif intent == "Enter_Username":
-        text = handle_fallback(queryResult.parameters["Username"])
+        text = handle_username(queryResult.parameters["Username"])
     elif intent == "Enter_Favorite_Team":
         text = handle_favorite_team(queryResult.parameters["BasketballTeam"])
     elif intent == "Enter_Favorite_Location":
