@@ -7,7 +7,7 @@ from nltk.tokenize import word_tokenize
 from numpy import dot
 from numpy.linalg import norm
 import random
-
+import pyrebase
 import dialogflow_v2beta1
 import os
 
@@ -16,7 +16,6 @@ from nba_api.stats.static import players
 from nba_api.stats.endpoints import playervsplayer
 from nba_api.stats.endpoints import playergamelog
 from nba_api.stats.library.parameters import SeasonAll
-
 
 # def explicit():
 #     from google.cloud import storage
@@ -30,21 +29,38 @@ from nba_api.stats.library.parameters import SeasonAll
 #     buckets = list(storage_client.list_buckets())
 #     print(buckets)
 
-#client = dialogflow_v2beta1.AgentsClient()
+# client = dialogflow_v2beta1.AgentsClient()
+
+firebaseConfig = {"apiKey": "AIzaSyDap-GPtbPxRCJwwsxAmNyhdM24Fx_XI5w",
+                  "authDomain": "jordanbot-2a753.firebaseapp.com",
+                  "databaseURL": "https://jordanbot-2a753-default-rtdb.firebaseio.com",
+                  "projectId": "jordanbot-2a753",
+                  "storageBucket": "jordanbot-2a753.appspot.com",
+                  "messagingSenderId": "862087965887",
+                  "appId": "1:862087965887:web:50c213631d9b579c496a0a",
+                  "measurementId": "G-VDVTP2EZLM"}
+
+firebase = pyrebase.initialize_app(firebaseConfig)
+# auth = firebase.auth()
+# storage = firebase.storeage()
+db = firebase.database()
+db.child("User Models")
+
 app = FastAPI()
 
 
 class Intent(BaseModel):
     displayName: str
 
-#class OutputContext(BaseModel):
+
+# class OutputContext(BaseModel):
 #    name: str
 
 class Request(BaseModel):
     queryText: str
     intent: Intent
     parameters: Dict[str, Any]
-    #outputContext: OutputContext
+    # outputContext: OutputContext
 
 
 def levenshtein_distance(stem: str, word: str):
@@ -115,14 +131,20 @@ def nba_team_dict() -> dict:
     nba_teams["Washington Wizards"] = "WAS"
     return nba_teams
 
-question_list = ["Leave", "Exit", "I'm done", "I have no more questions", "Tell me a fact about you", "Give me a Jordan fact", "Tell me a random fact about you", "What is a random fact about you?", "Tell me a random fact about Jordan", "What is a random fact about Jordan?", "Functionality", "What functionality do you have", "What options do I have", "What can I ask?", "What can you do?"]
+
+question_list = ["Leave", "Exit", "I'm done", "I have no more questions", "Tell me a fact about you",
+                 "Give me a Jordan fact", "Tell me a random fact about you", "What is a random fact about you?",
+                 "Tell me a random fact about Jordan", "What is a random fact about Jordan?", "Functionality",
+                 "What functionality do you have", "What options do I have", "What can I ask?", "What can you do?"]
+
+
 def handle_fallback(query_text: str) -> str:
     highest_cosine_similarity = 0
     closest_response = ""
     for response in question_list:
         cosine_val = cosine_similarity(query_text, response)
-        #print(cosine_val)
-        #print(response)
+        # print(cosine_val)
+        # print(response)
         if cosine_val != 0 and cosine_val >= highest_cosine_similarity:
             highest_cosine_similarity = cosine_val
             closest_response = response
@@ -142,8 +164,88 @@ def handle_fallback(query_text: str) -> str:
     return fullfillment_txt_return
 
 
+term_list = ["jordan", "nba", "game", "bulls", "chicago", "vs", "career", "finals", "points", "season"]
+
+
 def handle_random_fact() -> str:
-    return "Here is a fact"
+    username = db.child("Current User").get().val()['current username']
+    user_root = db.child("User Models").child(username).get().val()
+
+    key_to_use = term_list[random.randint(0, len(term_list) - 1)]
+    if 'previous fact' not in user_root.keys():
+        # key_to_use = term_list[random.randint(0, len(term_list) - 1)]
+        iterator = iter(db.child("Random Info").child(key_to_use).get().val())
+        next(iterator)
+        next(iterator)
+        key_of_info = next(iterator)
+        info = db.child("Random Info").child(key_to_use).child(key_of_info).get().val()["sentence"]
+        db.child("User Models").child(username).update({"last info given": info})
+        text = f"{info}\nDid you find this fact interesting?"
+
+    elif 'previous fact' in user_root.keys() and user_root['liked fact'] == "True":
+        shortest_leven_dist = 100000
+        shortest_leven_info = ""
+
+        info_interesting = user_root["previous fact"]
+
+        for sentence in db.child("Random Info").child(key_to_use).get().val().values():
+            current_leven_dist = levenshtein_distance(info_interesting, sentence)
+            if current_leven_dist < shortest_leven_dist:
+                shortest_leven_dist = current_leven_dist
+                shortest_leven_info = sentence
+
+        db.child("User Models").child(username).update({"last info given": shortest_leven_info})
+        text = f"{shortest_leven_info}\nDid you find this fact interesting?"
+
+    else:
+        longest_leven_dist = 0
+        longest_leven_info = ""
+
+        info_interesting = user_root["previous fact"]
+
+        for sentence in db.child("Random Info").child(key_to_use).get().val().values():
+            current_leven_dist = levenshtein_distance(info_interesting, sentence)
+            if current_leven_dist > longest_leven_dist:
+                longest_leven_dist = current_leven_dist
+                longest_leven_info = sentence
+
+        db.child("User Models").child(username).update({"last info given": longest_leven_info})
+        text = f"{longest_leven_info}\nDid you find this fact interesting?"
+
+    return text
+
+
+def handle_random_fact_no() -> str:
+    username = db.child("Current User").get().val()['current username']
+    db.child("User Models").child(username).update({"liked fact": "False"})
+    return "I'll keep that in mind next time"
+
+def handle_random_fact_yes() -> str:
+    username = db.child("Current User").get().val()['current username']
+    db.child("User Models").child(username).update({"liked fact": "True"})
+    return "I'll keep that in mind next time"
+
+########################
+def handle_created_username(username: str) -> str:
+    db.child("Current User").set({"current username": username})
+    db.child("User Models").child(username).get()
+
+
+def handle_username(username: str) -> str:
+    db.child("Current User").set({"current username": username})
+    return f"Welcome {username}! Do you have a favorite team?"
+
+#############
+def handle_favorite_team(team: str) -> str:
+    username = db.child("Current User").get().val()['current username']
+    db.child("User Models").child(username).set({"favorite team": team})
+    return f"Thanks {username}"
+
+##############
+def handle_favorite_location(location: str) -> str:
+    username = db.child("Current User").get().val()['current username']
+    db.child("User Models").child(username).set({"favorite location": location})
+    return f"Thanks {username}"
 
 
 def cosine_similarity(query_text: str, prebuilt_questions: str) -> int:
@@ -178,14 +280,27 @@ intent_dict = {
     "Jordan_Random_Fact": handle_random_fact,
 }
 
+
 @app.post("/")
 async def home(queryResult: Request = Body(..., embed=True)):
     intent = queryResult.intent.displayName
-    #print(intent)
+    # print(intent)
     if intent == "Default_Welcome_Intent - fallback":
         text = handle_fallback(queryResult.queryText)
+    elif intent == "Enter_Username":
+        text = handle_fallback(queryResult.parameters["Username"])
+    elif intent == "Enter_Favorite_Team":
+        text = handle_favorite_team(queryResult.parameters["BasketballTeam"])
+    elif intent == "Enter_Favorite_Location":
+        text = handle_favorite_location(queryResult.parameters["geo-city"])
     elif intent == "Jordan_Random_Fact":
         text = handle_random_fact()
+    elif intent == "Jordan_Random_Fact-no":
+        text = handle_random_fact_no()
+    elif intent == "Jordan_Random_Fact-yes":
+        text = handle_random_fact_yes()
+    #########
+
     else:
         text = "I'm not sure how to help with that"
     # if handler := intent_dict.get(intent):
