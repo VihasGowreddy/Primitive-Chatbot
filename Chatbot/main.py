@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 
 from fastapi import Body, FastAPI
 from pydantic import BaseModel
@@ -8,28 +8,8 @@ from numpy import dot
 from numpy.linalg import norm
 import random
 import pyrebase
-import dialogflow_v2beta1
-import os
+import pandas as pd
 
-from nba_api.stats.static import teams
-from nba_api.stats.static import players
-from nba_api.stats.endpoints import playervsplayer
-from nba_api.stats.endpoints import playergamelog
-from nba_api.stats.library.parameters import SeasonAll
-
-# def explicit():
-#     from google.cloud import storage
-#
-#     # Explicitly use service account credentials by specifying the private key
-#     # file.
-#     storage_client = storage.Client.from_service_account_json(
-#         '../../jordan-infobot-eaok-2dd0da1e3e3a.json')
-#
-#     # Make an authenticated API request
-#     buckets = list(storage_client.list_buckets())
-#     print(buckets)
-
-# client = dialogflow_v2beta1.AgentsClient()
 
 firebaseConfig = {"apiKey": "AIzaSyDap-GPtbPxRCJwwsxAmNyhdM24Fx_XI5w",
                   "authDomain": "jordanbot-2a753.firebaseapp.com",
@@ -44,7 +24,6 @@ firebase = pyrebase.initialize_app(firebaseConfig)
 # auth = firebase.auth()
 # storage = firebase.storeage()
 db = firebase.database()
-db.child("User Models")
 
 app = FastAPI()
 
@@ -53,15 +32,72 @@ class Intent(BaseModel):
     displayName: str
 
 
-# class OutputContext(BaseModel):
-#    name: str
-
 class Request(BaseModel):
     queryText: str
     intent: Intent
     parameters: Dict[str, Any]
     # outputContext: OutputContext
 
+
+def dfs_formatted():
+    df_dict = dict()
+    df_dict["College Stats"] = pd.read_csv("Chatbot/all_college_stats.csv")
+    df_dict["Game Highs"] = pd.read_csv("Chatbot/game_highs.csv")
+    df_dict["Per Game"] = pd.read_csv("Chatbot/per_game.csv")
+    df_dict["Playoffs"] = pd.read_csv("Chatbot/playoffs_per_game.csv")
+    df_dict["Against Teams"] = pd.read_csv("Chatbot/against_teams.csv")
+    return df_dict
+
+
+def get_career_points(df_dict: dict):
+    return df_dict["Per Game"].PTS.iloc[21]
+
+
+def get_season_points(df_dict: dict, season: str):
+    return df_dict["Per Game"].where(df_dict["Per Game"]["Season"] == season).PTS.dropna()[0]
+
+
+def get_career_rebounds(df_dict: dict):
+    return df_dict["Per Game"].TRB.iloc[21]
+
+
+def get_season_rebounds(df_dict: dict, season: str):
+    return df_dict["Per Game"].where(df_dict["Per Game"]["Season"] == season).TRB.dropna()[0]
+
+
+def get_career_assists(df_dict: dict):
+    return df_dict["Per Game"].AST.iloc[21]
+
+
+def get_season_assists(df_dict: dict, season: str):
+    return df_dict["Per Game"].where(df_dict["Per Game"]["Season"] == season).AST.dropna()[0]
+
+
+def get_against_team(df_dict: dict, opp: str, stat: str) -> float:
+    if stat == "points" or stat == "points per game" or stat == "ppg" or stat == "pts":
+        stat = "PPG"
+    elif stat == "assists" or stat == "assists per game" or stat == "apg":
+        stat = "APG"
+    elif stat == "rebounds" or stat == "rebounds per game" or stat == "rpg" or stat == "trb":
+        stat = "RPG"
+    elif stat == "steals" or stat == "steals per game" or stat == "spg" or stat == "stl":
+        stat = "SPG"
+    elif stat == "blocks" or stat == "blocks per game" or stat == "bpg" or stat == "blk":
+        stat = "BPG"
+    elif stat == "field goal percentage" or stat == "field goal percent" or stat == "percent field goal" or stat == "fg%":
+        stat = "FG%"
+    index = df_dict[df_dict["OPP"] == opp].index.values.astype(int)
+    return df_dict[stat].values[index].tolist()[0]
+
+
+def get_random_against_team_stat(df_dict: dict, opp: str) -> Tuple[float, str]:
+    retrieve_list = ["PPG", "RPG", "APG", "SPG", "BPG"]
+    index = random.randint(0, len(retrieve_list) - 1)
+    stat = get_against_team(df_dict["Against Teams"], opp, retrieve_list[index])
+    return stat, retrieve_list[index]
+
+
+df_dict = dfs_formatted()
 
 def levenshtein_distance(stem: str, word: str):
     '''
@@ -94,41 +130,36 @@ def levenshtein_distance(stem: str, word: str):
 
 def nba_team_dict() -> dict:
     nba_teams = dict()
-    nba_teams["Atlanta Hawks"] = "ATL"
-    nba_teams["Boston Celtics"] = "BOS"
-    nba_teams["Brooklyn Nets"] = "BKN"
-    nba_teams["Charlotte Hornets"] = "CHA"
-    nba_teams["Chicago Bulls"] = "CHI"
-    nba_teams["Cleveland Cavaliers"] = "CLE"
-    nba_teams["Dallas Mavericks"] = "DAL"
-    nba_teams["Denver Nuggets"] = "DEN"
-    nba_teams["Detroit Pistons"] = "DET"
-    nba_teams["Golden State Warriors"] = "GSW"
-    nba_teams["Houston Rockets"] = "HOU"
-    nba_teams["Indiana Pacers"] = "IND"
-    nba_teams["Los Angeles Clippers"] = "LAC"
-    nba_teams["Los Angeles Lakers"] = "LAL"
-    nba_teams["Memphis Grizzlies"] = "MEM"
-    nba_teams["Miami Heat"] = "MIA"
-    nba_teams["Milwaukee Bucks"] = "MIL"
-    nba_teams["Minnesota Timberwolves"] = "MIN"
-    nba_teams["New Jersey Nets"] = "NJN"
-    nba_teams["New Orleans Hornets"] = "NOK"
-    nba_teams["New Orleans Pelicans"] = "NOP"
-    nba_teams["New York Knicks"] = "NYK"
-    nba_teams["Oklahoma City Thunder"] = "OKC"
-    nba_teams["Orlando Magic"] = "ORL"
-    nba_teams["Philadelphia 76ers"] = "PHI"
-    nba_teams["Phoenix Suns"] = "PHX"
-    nba_teams["Portland Trailblazers"] = "POR"
-    nba_teams["Sacramento Kings"] = "SAC"
-    nba_teams["San Antonio Spurs"] = "SAS"
-    nba_teams["Seattle SuperSonics"] = "SEA"
-    nba_teams["Toronto Raptors"] = "TOR"
-    nba_teams["Utah Jazz"] = "UTA"
-    nba_teams["Vancouver Grizzlies"] = "VAN"
-    nba_teams["Washington Bullets"] = "WAS"
-    nba_teams["Washington Wizards"] = "WAS"
+    nba_teams["Atlanta"] = ["Hawks", "ATL"]
+    nba_teams["Boston"] = ["Celtics", "BOS"]
+    nba_teams["Charlotte"] = ["Hornets", "CHA"]
+    nba_teams["Chicago"] = ["Bulls", "CHI"]
+    nba_teams["Cleveland"] = ["Cavaliers", "CLE"]
+    nba_teams["Dallas"] = ["Mavericks", "DAL"]
+    nba_teams["Denver"] = ["Nuggets", "DEN"]
+    nba_teams["Detroit"] = ["Pistons", "DET"]
+    nba_teams["Golden State "] = ["Warriors", "GSW"]
+    nba_teams["Houston"] = ["Rockets", "HOU"]
+    nba_teams["Indiana"] = ["Pacers", "IND"]
+    nba_teams["Los Angeles"] = ["Clippers", "LAC"]
+    nba_teams["Los Angeles"] = ["Lakers", "LAL"]
+    nba_teams["Memphis"] = ["Grizzlies", "MEM"]
+    nba_teams["Miami"] = ["Heat", "MIA"]
+    nba_teams["Milwaukee"] = ["Bucks", "MIL"]
+    nba_teams["Minnesota"] = ["Timberwolves", "MIN"]
+    nba_teams["New Jersey"] = ["Nets", "NJN"]
+    nba_teams["New Orleans"] = ["Pelicans", "NOP"]
+    nba_teams["New York"] = ["Knicks", "NYK"]
+    nba_teams["Orlando"] = ["Magic", "ORL"]
+    nba_teams["Philadelphia"] = ["76ers", "PHI"]
+    nba_teams["Phoenix"] = ["Suns", "PHX"]
+    nba_teams["Portland"] = ["Trail Blazers", "POR"]
+    nba_teams["Sacramento"] = ["Kings", "SAC"]
+    nba_teams["San Antonio"] = ["Spurs", "SAS"]
+    nba_teams["Seattle"] = ["SuperSonics", "SEA"]
+    nba_teams["Toronto"] = ["Raptors", "TOR"]
+    nba_teams["Utah"] = ["Jazz", "UTA"]
+    nba_teams["Washington"] = ["Wizards", "WAS"]
     return nba_teams
 
 
@@ -164,7 +195,7 @@ def handle_fallback(query_text: str) -> str:
     return fullfillment_txt_return
 
 
-term_list = ["jordan", "nba", "game", "bulls", "chicago", "vs", "career", "finals", "points", "season"]
+term_list = ["jordan", "game", "bulls", "chicago", "vs", "career", "finals", "points", "season"]
 
 
 def handle_random_fact() -> str:
@@ -220,32 +251,88 @@ def handle_random_fact_no() -> str:
     db.child("User Models").child(username).update({"liked fact": "False"})
     return "I'll keep that in mind next time"
 
+
 def handle_random_fact_yes() -> str:
     username = db.child("Current User").get().val()['current username']
     db.child("User Models").child(username).update({"liked fact": "True"})
     return "I'll keep that in mind next time"
 
+
 ########################
 def handle_created_username(username: str) -> str:
     db.child("Current User").set({"current username": username})
-    db.child("User Models").child(username).get()
+    favorite_team = db.child("User Models").child(username).get().val()["favorite team"]
+    return_text = f"Welcome back {username}. "
+
+    if favorite_team == "None":
+        return_text += "Just want to remind you unfortunate it is that your city's inhabitants couldn't witness Jordan destroying their team."
+    else:
+        stat_val, stat_measure = get_random_against_team_stat(df_dict, favorite_team)
+        return_text += f"Just wanted to let you know that Jordan dropped an average of {stat_val} {stat_measure} on the {favorite_team}"
+    return return_text
 
 
-def handle_username(username: str) -> str:
+def handle_username(username: str) -> Tuple[list, str]:
+    user_list = db.child("User Models").get().val().keys()
+    if username in user_list:
+        output_context = [dict(), dict(), dict()]
+        output_context[0][
+            "name"] = "projects/jordan-infobot-eaok/locations/global/agent/sessions/f75dcaba-b09f-6dc5-7f5c-f6f0f2c6cc5b/contexts/ask_if_conversed-followup"
+        output_context[0]["lifespanCount"] = 1
+        output_context[1][
+            "name"] = "projects/jordan-infobot-eaok/locations/global/agent/sessions/f75dcaba-b09f-6dc5-7f5c-f6f0f2c6cc5b/contexts/default_welcome_intent-followup"
+        output_context[1]["lifespanCount"] = 1
+        output_context[2][
+            "name"] = "projects/jordan-infobot-eaok/locations/global/agent/sessions/f75dcaba-b09f-6dc5-7f5c-f6f0f2c6cc5b/contexts/created_account-no-followup"
+        output_context[2]["lifespanCount"] = 1
+        return output_context, "This username is already taken. Please create a new username"
+
     db.child("Current User").set({"current username": username})
-    return f"Welcome {username}! Do you have a favorite team?"
+    return [], f"Welcome {username}! Do you have a favorite team?"
+
 
 #############
 def handle_favorite_team(team: str) -> str:
+    team_list = nba_team_dict()
+    team_found = False
+    for team_syn in list(team_list.values()):
+        if team in team_syn:
+            team_found = True
+            break
+    if not team_found:
+        team = "None"
+    elif team_found and len(team) == 3:
+        for key in team_list:
+            if team_list[key][1] == team:
+                team = team_list[key][0]
+                break
+
     username = db.child("Current User").get().val()['current username']
     db.child("User Models").child(username).set({"favorite team": team})
-    return f"Thanks {username}"
+
+    if team != "None":
+        stat_val, stat_measure = get_random_against_team_stat(df_dict, team)
+        return_text = f"Thanks {username}. Looks like Jordan destroyed your {team} by averaging {stat_val} {stat_measure}"
+    else:
+        return_text = f"Thanks {username}. I didn't recognize the team you entered so looks like you're lucky they never faced Jordan"
+    return return_text
+
 
 ##############
-def handle_favorite_location(location: str) -> str:
+def handle_favorite_location(city: str) -> str:
     username = db.child("Current User").get().val()['current username']
-    db.child("User Models").child(username).set({"favorite location": location})
-    return f"Thanks {username}"
+    team_list = nba_team_dict()
+
+    if city in team_list.keys():
+        hometown_team = team_list[city][0]
+        db.child("User Models").child(username).set({"favorite team": hometown_team})
+        stat_val, stat_measure = get_random_against_team_stat(df_dict, hometown_team)
+        return_text = f"Thanks {username}. Jordan destroyed your hometown team, the {hometown_team}, by averaging {stat_val} {stat_measure}"
+    else:
+        db.child("User Models").child(username).set({"favorite team": "None"})
+        return_text = f"Thanks {username}. Looks like your hometown doesn't have a team or didn't have a team when Jordan played. Unlucky that your city was unable to witness greatness."
+
+    return return_text
 
 
 def cosine_similarity(query_text: str, prebuilt_questions: str) -> int:
@@ -275,11 +362,20 @@ def cosine_similarity(query_text: str, prebuilt_questions: str) -> int:
     return float(dot(occurrences_query, occurrences_question)) / (norm(occurrences_query) * norm(occurrences_question))
 
 
-intent_dict = {
-    "Default Fallback Intent": handle_fallback,
-    "Jordan_Random_Fact": handle_random_fact,
-}
-
+def convert_stat(stat: str) -> str:
+    if stat == "points" or stat == "points per game" or stat == "ppg" or stat == "pts":
+        stat_ret = "PTS"
+    elif stat == "assists" or stat == "assists per game" or stat == "apg":
+        stat_ret = "AST"
+    elif stat == "rebounds" or stat == "rebounds per game" or stat == "rpg" or stat == "trb":
+        stat_ret = "TRB"
+    elif stat == "steals" or stat == "steals per game" or stat == "spg" or stat == "stl":
+        stat_ret = "STL"
+    elif stat == "blocks" or stat == "blocks per game" or stat == "bpg" or stat == "blk":
+        stat_ret = "BLK"
+    elif stat == "field goal percentage" or stat == "field goal percent" or stat == "percent field goal" or stat == "fg%":
+        stat_ret = "FG%"
+    return stat_ret
 
 @app.post("/")
 async def home(queryResult: Request = Body(..., embed=True)):
@@ -287,56 +383,55 @@ async def home(queryResult: Request = Body(..., embed=True)):
     # print(intent)
     if intent == "Default_Welcome_Intent - fallback":
         text = handle_fallback(queryResult.queryText)
+
     elif intent == "Enter_Username":
-        text = handle_username(queryResult.parameters["Username"])
+        context_list, text = handle_username(queryResult.parameters["Username"])
+        if len(context_list) == 0:
+            return {"fulfillmentText": text}
+        return {"fulfillmentText": text, "outputContexts": context_list}
+
     elif intent == "Enter_Favorite_Team":
         text = handle_favorite_team(queryResult.parameters["BasketballTeam"])
-    elif intent == "Enter_Favorite_Location":
+
+    elif intent == "Enter_Favorite_City":
         text = handle_favorite_location(queryResult.parameters["geo-city"])
+
+    elif intent == "Provide_Created_Username":
+        text = handle_created_username(queryResult.parameters["Username"])
+
     elif intent == "Jordan_Random_Fact":
         text = handle_random_fact()
+
     elif intent == "Jordan_Random_Fact-no":
         text = handle_random_fact_no()
+
     elif intent == "Jordan_Random_Fact-yes":
         text = handle_random_fact_yes()
+
+    elif intent == "Jordan_Stat":
+        stat_type = queryResult.parameters["BasketballStat"]
+        opp_team = queryResult.parameters["BasketballTeam"]
+        if stat_type == "" and opp_team == "":
+            text = "Michael Jordan has 6 NBA championship rings"
+        elif opp_team == "":
+            question = queryResult.queryText
+            stat_convert_type = convert_stat(stat_type)
+            if "college" in question or "university" in question:
+                stat_val = df_dict["College Stats"][stat_convert_type].values[3]
+                text = f"Jordan averaged {stat_val} {stat_type} in college"
+            elif "playoffs" in question:
+                stat_val = df_dict["Playoffs"][stat_convert_type].values[13]
+                text = f"Jordan averaged {stat_val} {stat_type} in the NBA playoffs"
+            else:
+                stat_val = df_dict["Per Game"][stat_convert_type].values[19]
+                text = f"Jordan averaged {stat_val} {stat_type} per game in the NBA"
+        else:
+            stat_val = get_against_team(df_dict["Against Teams"], opp_team, stat_type)
+            text = f"For his career, Jordan averaged {stat_val} {stat_type} against the {opp_team}"
     #########
 
     else:
         text = "I'm not sure how to help with that"
-    # if handler := intent_dict.get(intent):
-    #     text = handler(**queryResult.parameters)
-    # else:
-    #     text = "I'm not sure how to help with that"
+
     return {"fulfillmentText": text}
 
-# if __name__ == '__main__':
-# #     #print(handle_fallback("What can you say?"))
-# # #     #     os.path.join("/c/Users/vihas/Desktop/UTDALLAS", "\"Semester 8\"/NLP/jordan-infobot-eaok-2dd0da1e3e3a.json")
-# # #     #     if os.path.exists("../../jordan-infobot-eaok-2dd0da1e3e3a.json"):
-# # #     #         print("IS FILE")
-# # #     #     else:
-# # #     #         print("IS NOT FILE")
-# # #     #     explicit()
-#     nba_teams = teams.get_teams()
-#     sonics = [team for team in nba_teams if team['abbreviation'] == 'UTA'][0]
-#     sonics_id = sonics['id']
-#
-#     jordan = players.find_players_by_full_name("Lebron James")
-#     jordan_id = jordan[0]['id']
-#     print(jordan_id)
-#
-#     # If you want all seasons, you must import the SeasonAll parameter
-#     from nba_api.stats.library.parameters import SeasonAll
-#     from nba_api.stats.endpoints import PlayerDashboardByOpponent
-#     import nba_api.stats.library.parameters as nba_params
-#     import pandas as pd
-#
-#     gamelog_bron_all = playergamelog.PlayerGameLog(player_id=jordan_id, season=SeasonAll.all)
-#
-#     df_jordan_games = playergamelog.PlayerGameLog(player_id=jordan_id, season=SeasonAll.all)
-#     #print(df_jordan_games)
-#
-#     payton = players.find_players_by_full_name("Patrick Ewing")
-#     payton_id = payton[0]['id']
-#
-#     print(PlayerDashboardByOpponent(player_id=jordan_id, opponent_team_id=sonics_id).get_data_frames())
