@@ -429,6 +429,7 @@ async def home(queryResult: Request = Body(..., embed=True)):
             stat_val = get_against_team(df_dict["Against Teams"], opp_team, stat_type)
             text = f"For his career, Jordan averaged {stat_val} {stat_type} against the {opp_team}"
     #########
+    #Add the season specific information
 
     else:
         text = "I'm not sure how to help with that"

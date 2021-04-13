@@ -14,17 +14,39 @@ from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 from collections import Counter
 import sqlite3
+import pyrebase
+import pandas as pd
 
-if os.path.exists("knowledge_base.db"):
-    os.remove("knowledge_base.db")
+firebaseConfig = {"apiKey": "AIzaSyDap-GPtbPxRCJwwsxAmNyhdM24Fx_XI5w",
+                  "authDomain": "jordanbot-2a753.firebaseapp.com",
+                  "databaseURL": "https://jordanbot-2a753-default-rtdb.firebaseio.com",
+                  "projectId": "jordanbot-2a753",
+                  "storageBucket": "jordanbot-2a753.appspot.com",
+                  "messagingSenderId": "862087965887",
+                  "appId": "1:862087965887:web:50c213631d9b579c496a0a",
+                  "measurementId": "G-VDVTP2EZLM"}
 
-conn = sqlite3.connect("knowledge_base.db")
-c = conn.cursor()
+firebase = pyrebase.initialize_app(firebaseConfig)
+# auth = firebase.auth()
+# storage = firebase.storeage()
+db = firebase.database()
+
+# db.child("Random Info")
+# db.child("User Models")
+# db.child("Statistics")
+# db.child("Current User").set({"current username": "None"})
+# db.child("Current User").update({"try": "None"})
+
+# if os.path.exists("knowledge_base.db"):
+#     os.remove("knowledge_base.db")
+#
+# conn = sqlite3.connect("knowledge_base.db")
+# c = conn.cursor()
 
 
-def create_database():
-    c.execute("CREATE TABLE knowledgeBase (term REAL, sentence TEXT)")
-    conn.commit()
+# def create_database():
+#     c.execute("CREATE TABLE knowledgeBase (term REAL, sentence TEXT)")
+#     conn.commit()
 
 
 def preprocess(file_txt: str) -> list:
@@ -99,6 +121,8 @@ def webcrawler_scrape(starting_url: str) -> list:
     url_queue.append("https://en.wikipedia.org/wiki/List_of_career_achievements_by_Michael_Jordan")
     url_queue.append("https://en.wikipedia.org/wiki/1984_NBA_draft")
     url_queue.append("https://www.sbnation.com/secret-base/22307608/seagram-award-michael-jordan-mvp-1987")
+    url_queue.append("https://www.nba.com/history/legends/profiles/michael-jordan")
+    url_queue.append("https://www.nba.com/stats/player/893/career/")
     url_queue.append("https://bleacherreport.com/articles/2888183-how-michael-jordan-broke-the-jordan-rules")
     url_queue.append("https://www.cnbc.com/2020/05/17/michael-jordan-was-jerk-says-teammates-why-it-helped.html")
     url_queue.append(
@@ -112,6 +136,10 @@ def webcrawler_scrape(starting_url: str) -> list:
         "https://www.miningjournal.net/sports/2020/05/chicago-bulls-teammates-saw-first-hand-the-price-michael-jordan-had-to-pay-for-excellence/")
     url_queue.append("https://www.biography.com/athlete/michael-jordan")
     url_queue.append("https://www.usatoday.com/story/gameon/2012/12/12/nba-jordan-bulls-12/1763265/")
+    url_queue.append("https://www.basketball-reference.com/players/j/jordami01.html")
+    url_queue.append("https://www.basketball-reference.com/players/j/jordami01/gamelog-playoffs/")
+    url_queue.append("https://www.basketball-reference.com/teams/WAS/2002.html")
+    url_queue.append("https://www.basketball-reference.com/teams/CHI/1985.html")
 
     for count, url in enumerate(url_queue):
         with open(os.path.join("Unedited_txt", f"{count}_url_contents"), "w", encoding="utf-8") as f:
@@ -156,6 +184,7 @@ def tf_idf_frequency() -> dict:
 
 
 if __name__ == '__main__':
+
     starting_url = "https://www.google.com/search?q=michael+jordan&rlz=1C1SQJL_enUS807US807&oq=michael+jordan+&aqs=chrome.0.69i59l3j35i39j0j69i60l3.3303j0j7&sourceid=chrome&ie=UTF-8"
 
     url_queue = webcrawler_scrape(starting_url)
@@ -165,16 +194,27 @@ if __name__ == '__main__':
     print("\nList of Top 40 Terms by Frequency")
     print(list(frequency_dict.keys())[-40:])
 
-    term_list = ["game", "points", "draft", "goal", "pick", "finals", "round", "june", "may", "basketball"]
+    term_list = ["nba", "chicago", "vs", "career", "finals", "points", "season"]
+    terms_added = []
 
-    create_database()
+    # create_database()
 
     for term in term_list:
+        to_reach = 0
         for sent in sent_list:
             if term in sent or term.capitalize() in sent:
-                c.execute("INSERT INTO knowledgeBase (term, sentence) VALUES (?,?)",
-                          (term, sent))
-                conn.commit()
+                print(sent)
+                print("\n")
+                confirm = input("Add to database: ")
+                if confirm == "y" or confirm == "yes":
+                    db.child("Random Info").child(term).push({"sentence": sent})
+                    to_reach += 1
+                if to_reach == 10:
+                    break
+
+                # c.execute("INSERT INTO knowledgeBase (term, sentence) VALUES (?,?)",
+                #           (term, sent))
+                # conn.commit()
     # c.execute("INSERT INTO knowledgeBase (term, sentence) VALUES (?,?)", ("vs", "asdfasdfasdf fasdf d"))
     # conn.commit()
 
