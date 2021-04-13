@@ -1,5 +1,5 @@
 from typing import Any, Dict, Tuple
-
+from datetime import datetime
 from fastapi import Body, FastAPI
 from pydantic import BaseModel
 from nltk.corpus import stopwords
@@ -9,7 +9,6 @@ from numpy.linalg import norm
 import random
 import pyrebase
 import pandas as pd
-
 
 firebaseConfig = {"apiKey": "AIzaSyDap-GPtbPxRCJwwsxAmNyhdM24Fx_XI5w",
                   "authDomain": "jordanbot-2a753.firebaseapp.com",
@@ -98,6 +97,7 @@ def get_random_against_team_stat(df_dict: dict, opp: str) -> Tuple[float, str]:
 
 
 df_dict = dfs_formatted()
+
 
 def levenshtein_distance(stem: str, word: str):
     '''
@@ -377,6 +377,7 @@ def convert_stat(stat: str) -> str:
         stat_ret = "FG%"
     return stat_ret
 
+
 @app.post("/")
 async def home(queryResult: Request = Body(..., embed=True)):
     intent = queryResult.intent.displayName
@@ -429,10 +430,13 @@ async def home(queryResult: Request = Body(..., embed=True)):
             stat_val = get_against_team(df_dict["Against Teams"], opp_team, stat_type)
             text = f"For his career, Jordan averaged {stat_val} {stat_type} against the {opp_team}"
     #########
-    #Add the season specific information
+    # Add the season specific information
 
     else:
         text = "I'm not sure how to help with that"
 
     return {"fulfillmentText": text}
 
+
+def cronjob():
+    print(f"Cron job run at time {datetime.now()}")

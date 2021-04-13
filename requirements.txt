@@ -53,3 +53,4 @@ tqdm==4.56.0
 typing-extensions==3.7.4.3
 urllib3==1.26.3
 uvicorn==0.13.4
+APScheduler~=3.7.0
