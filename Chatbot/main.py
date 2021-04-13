@@ -436,7 +436,3 @@ async def home(queryResult: Request = Body(..., embed=True)):
         text = "I'm not sure how to help with that"
 
     return {"fulfillmentText": text}
-
-
-def cronjob():
-    print(f"Cron job run at time {datetime.now()}")
